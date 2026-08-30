@@ -1,0 +1,12 @@
+{
+  "name": "Loop Scoop",
+  "short_name": "Loop Scoop",
+  "description": "Any photo, scaled to your hoop",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3eee6",
+  "theme_color": "#3f5344",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

@@ -1,0 +1,13 @@
+node_modules
+dist
+release
+.output
+.tanstack
+.vinxi
+android
+ios
+*.log
+.DS_Store
+.vscode
+.env
+.env.*

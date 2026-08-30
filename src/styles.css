@@ -1,0 +1,85 @@
+@import 'tailwindcss';
+@import '@fontsource/fraunces/400.css';
+@import '@fontsource/fraunces/600.css';
+@import '@fontsource/fraunces/700.css';
+@import '@fontsource/source-sans-3/400.css';
+@import '@fontsource/source-sans-3/600.css';
+
+@theme {
+  --color-linen: #f3eee6;
+  --color-paper: #faf7f1;
+  --color-ink: #1c1916;
+  --color-muted: #6b6358;
+  --color-subtle: #9a9288;
+  --color-pine: #3f5344;
+  --color-pine-fg: #f4efe6;
+  --color-pine-hover: #334538;
+  --color-wood: #b8956a;
+  --color-wood-deep: #8c6a45;
+  --color-line: #e0d8cc;
+  --color-danger: #8a3b32;
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'Source Sans 3', 'Segoe UI', sans-serif;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-linen);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+}
+
+h1,
+h2,
+.font-display {
+  font-family: var(--font-display);
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-line);
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--color-linen);
+}
+
+.btn-primary {
+  background: var(--color-pine);
+  border-color: var(--color-pine);
+  color: var(--color-pine-fg);
+}
+
+.btn-primary:hover {
+  background: var(--color-pine-hover);
+  border-color: var(--color-pine-hover);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
