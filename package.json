@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "main": "electron/main.mjs",
+  "author": "Loop Scoop",
   "description": "Loop Scoop — any photo, scaled to your hoop",
   "scripts": {
     "dev": "vite dev --host 0.0.0.0 --port 3000",
@@ -45,7 +47,7 @@
       "output": "release"
     },
     "files": [
-      "dist/**/*",
+      "dist/client/**/*",
       "electron/**/*"
     ],
     "win": {
@@ -58,5 +60,9 @@
         }
       ]
     }
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "electron@38.8.6": true
   }
 }

@@ -4,16 +4,18 @@ import type { Pattern } from './types'
 export function renderChart(
   canvas: HTMLCanvasElement,
   pattern: Pattern,
-  opts?: { highlight?: number; fitWidth?: number; cellPx?: number },
+  opts?: { highlight?: number; fitWidth?: number; cellPx?: number; cols?: number; rows?: number; stride?: number },
 ) {
-  const n = pattern.size
+  const cols = Math.max(1, opts?.cols ?? pattern.size)
+  const rows = Math.max(1, opts?.rows ?? pattern.size)
+  const stride = Math.max(1, opts?.stride ?? pattern.size)
   const highlight = opts?.highlight ?? -1
   const width = Math.max(1, opts?.fitWidth ?? (canvas.clientWidth || 640))
-  const cell = opts?.cellPx ?? Math.max(10, Math.floor(width / (n + 3)))
+  const cell = opts?.cellPx ?? Math.max(10, Math.floor(width / (cols + 3)))
   const padLeft = cell * 2
   const padTop = cell * 2
-  const cssW = padLeft + n * cell + cell
-  const cssH = padTop + n * cell + cell
+  const cssW = padLeft + cols * cell + cell
+  const cssH = padTop + rows * cell + cell
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
   canvas.width = Math.round(cssW * dpr)
   canvas.height = Math.round(cssH * dpr)
@@ -32,16 +34,20 @@ export function renderChart(
   ctx.fillStyle = '#6b6358'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  for (let i = 0; i < n; i++) {
-    if (i % 10 === 0 || i === n - 1) {
+  for (let i = 0; i < cols; i++) {
+    if ((i + 1) % 10 === 0 || i === cols - 1) {
       ctx.fillText(String(i + 1), padLeft + (i + 0.5) * cell, padTop - cell * 0.6)
+    }
+  }
+  for (let i = 0; i < rows; i++) {
+    if ((i + 1) % 10 === 0 || i === rows - 1) {
       ctx.fillText(String(i + 1), padLeft - cell * 0.7, padTop + (i + 0.5) * cell)
     }
   }
 
-  for (let row = 0; row < n; row++) {
-    for (let col = 0; col < n; col++) {
-      const id = pattern.cells[row * n + col] ?? -1
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const id = pattern.cells[row * stride + col] ?? -1
       const x = padLeft + col * cell
       const y = padTop + row * cell
       if (id < 0) {
@@ -64,42 +70,46 @@ export function renderChart(
 
   ctx.strokeStyle = '#e0d8cc'
   ctx.lineWidth = 1
-  for (let i = 0; i <= n; i++) {
+  for (let i = 0; i <= cols; i++) {
     ctx.beginPath()
     ctx.moveTo(padLeft + i * cell, padTop)
-    ctx.lineTo(padLeft + i * cell, padTop + n * cell)
+    ctx.lineTo(padLeft + i * cell, padTop + rows * cell)
     ctx.stroke()
+  }
+  for (let i = 0; i <= rows; i++) {
     ctx.beginPath()
     ctx.moveTo(padLeft, padTop + i * cell)
-    ctx.lineTo(padLeft + n * cell, padTop + i * cell)
+    ctx.lineTo(padLeft + cols * cell, padTop + i * cell)
     ctx.stroke()
   }
 
   ctx.strokeStyle = '#1c1916'
   ctx.lineWidth = 1.6
-  for (let i = 0; i <= n; i += 10) {
+  for (let i = 0; i <= cols; i += 10) {
     ctx.beginPath()
     ctx.moveTo(padLeft + i * cell, padTop)
-    ctx.lineTo(padLeft + i * cell, padTop + n * cell)
+    ctx.lineTo(padLeft + i * cell, padTop + rows * cell)
     ctx.stroke()
+  }
+  for (let i = 0; i <= rows; i += 10) {
     ctx.beginPath()
     ctx.moveTo(padLeft, padTop + i * cell)
-    ctx.lineTo(padLeft + n * cell, padTop + i * cell)
+    ctx.lineTo(padLeft + cols * cell, padTop + i * cell)
     ctx.stroke()
   }
 
   ctx.strokeStyle = '#3f5344'
   ctx.setLineDash([4, 4])
   ctx.lineWidth = 1
-  const mid = padLeft + (n / 2) * cell
-  const midY = padTop + (n / 2) * cell
+  const mid = padLeft + (cols / 2) * cell
+  const midY = padTop + (rows / 2) * cell
   ctx.beginPath()
   ctx.moveTo(mid, padTop)
-  ctx.lineTo(mid, padTop + n * cell)
+  ctx.lineTo(mid, padTop + rows * cell)
   ctx.stroke()
   ctx.beginPath()
   ctx.moveTo(padLeft, midY)
-  ctx.lineTo(padLeft + n * cell, midY)
+  ctx.lineTo(padLeft + cols * cell, midY)
   ctx.stroke()
   ctx.setLineDash([])
 }

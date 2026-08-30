@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { HeadContent, Outlet, Scripts, createRootRoute } from '@tanstack/react-router'
 import { Toaster } from 'sonner'
+import { DiagPanel } from '../components/studio/diag-panel'
 import { StudioBoundary } from '../lib/diag/boundary'
 import { installDiag } from '../lib/diag/install'
 import { useStudio } from '../lib/studio-store'
@@ -30,11 +31,13 @@ export const Route = createRootRoute({
 })
 
 function RootComponent() {
+  const diagOpen = useStudio((s) => s.diagOpen)
   return (
     <RootDocument>
       <StudioBoundary onOpenLog={() => useStudio.getState().setDiagOpen(true)}>
         <Outlet />
       </StudioBoundary>
+      <DiagPanel open={diagOpen} onClose={() => useStudio.getState().setDiagOpen(false)} />
       <Toaster richColors position="bottom-center" />
     </RootDocument>
   )

@@ -21,13 +21,13 @@ function download(name: string, text: string, type: string) {
 }
 
 export function DiagPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [, bump] = useState(0)
+  const [tick, setTick] = useState(0)
   const [level, setLevel] = useState<DiagLevel | 'all'>('all')
-  useEffect(() => subscribeDiag(() => bump((n) => n + 1)), [])
+  useEffect(() => subscribeDiag(() => setTick((n) => n + 1)), [])
   const events = useMemo(() => {
     const all = getDiagEvents()
     return level === 'all' ? all : all.filter((e) => e.level === level)
-  }, [level, open, bump])
+  }, [level, open, tick])
 
   if (!open) return null
   return (

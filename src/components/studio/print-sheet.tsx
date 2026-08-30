@@ -66,6 +66,8 @@ export function PrintSheet() {
     }
     const url = URL.createObjectURL(pdf)
     const iframe = document.createElement('iframe')
+    iframe.setAttribute('sandbox', 'allow-modals allow-same-origin allow-scripts')
+    iframe.setAttribute('title', 'Print pattern')
     iframe.style.position = 'fixed'
     iframe.style.right = '0'
     iframe.style.bottom = '0'
@@ -74,28 +76,39 @@ export function PrintSheet() {
     iframe.style.border = '0'
     iframe.src = url
     document.body.appendChild(iframe)
+    let cleaned = false
     const cleanup = () => {
+      if (cleaned) return
+      cleaned = true
       iframe.remove()
       URL.revokeObjectURL(url)
       window.removeEventListener('afterprint', cleanup)
       window.removeEventListener('focus', cleanup)
     }
+    const downloadInstead = () => {
+      diag.warn('print', 'Print plugin missing; downloaded PDF instead')
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `loopscoop-${slug(pattern.sourceName)}.pdf`
+      a.click()
+      toast.message('PDF saved — open it and pick your printer')
+      cleanup()
+    }
+    let pluginLoaded = false
+    window.addEventListener('afterprint', cleanup)
     iframe.onload = () => {
+      pluginLoaded = true
       try {
-        iframe.contentWindow?.focus()
         iframe.contentWindow?.print()
-        window.addEventListener('afterprint', cleanup)
-        window.addEventListener('focus', cleanup)
       } catch (err) {
         diag.warn('print', 'Print plugin missing; downloaded PDF instead', { error: err })
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `loopscoop-${slug(pattern.sourceName)}.pdf`
-        a.click()
-        toast.message('PDF saved — open it and pick your printer')
-        cleanup()
+        downloadInstead()
       }
     }
+    iframe.onerror = () => downloadInstead()
+    window.setTimeout(() => {
+      if (!pluginLoaded && !cleaned) downloadInstead()
+    }, 4000)
   }
 
   async function share() {
@@ -108,6 +121,26 @@ export function PrintSheet() {
       }
     } catch (err) {
       diag.warn('print', 'PDF share cancelled or failed', { error: err })
+    }
+    try {
+      const files: File[] = []
+      const hoop = hoopRef.current
+      const chart = chartRef.current
+      const key = keyRef.current
+      const toFile = async (c: HTMLCanvasElement | null, name: string) => {
+        if (!c) return
+        const blob = await new Promise<Blob | null>((resolve) => c.toBlob((b) => resolve(b), 'image/png'))
+        if (blob) files.push(new File([blob], name, { type: 'image/png' }))
+      }
+      await toFile(hoop, 'loopscoop-hoop.png')
+      await toFile(chart, 'loopscoop-chart.png')
+      await toFile(key, 'loopscoop-key.png')
+      if (files.length && navigator.canShare?.({ files })) {
+        await navigator.share({ files, title: 'Loop Scoop pattern' })
+        return
+      }
+    } catch (err) {
+      diag.warn('print', 'PNG share failed', { error: err })
     }
     toast.message('Share the saved PDF, or use Print on paper.')
     await savePdf()
@@ -148,8 +181,8 @@ export function PrintSheet() {
                 className="btn btn-primary"
                 onClick={async () => {
                   try {
-                    const hoop = hoopRef.current ?? document.createElement('canvas')
-                    if (!hoopRef.current) renderHoop(hoop, { pattern, cssSize: 384 })
+                    const hoop = document.createElement('canvas')
+                    renderHoop(hoop, { pattern, cssSize: 384 })
                     const printer = await printPatternBluetooth(pattern, hoop)
                     setBtName(printer.name)
                     toast.success(`Printed to ${printer.name}`)

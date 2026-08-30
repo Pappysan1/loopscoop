@@ -52,27 +52,30 @@ export async function buildPatternPdf(pattern: Pattern): Promise<Blob | null> {
         const row0 = ty * plan.rows
         const col1 = Math.min(pattern.size, col0 + plan.cols)
         const row1 = Math.min(pattern.size, row0 + plan.rows)
-        const leftoverC = col1 - col0
-        const leftoverR = row1 - row0
+        const leftoverC = Math.max(1, col1 - col0)
+        const leftoverR = Math.max(1, row1 - row0)
         let cell = baseCell
-        if (tx === plan.tilesX - 1 || ty === plan.tilesY - 1) {
-          const growC = leftoverC > 0 ? Math.min(42, Math.floor((7.4 * pxPerIn) / leftoverC)) : cell
-          const growR = leftoverR > 0 ? Math.min(42, Math.floor((8.6 * pxPerIn) / leftoverR)) : cell
-          cell = Math.max(cell, Math.min(growC, growR))
+        if (leftoverC < plan.cols) {
+          cell = Math.max(cell, Math.min(42, Math.floor((7.4 * pxPerIn) / leftoverC)))
         }
-        const slice: Pattern = {
-          ...pattern,
-          size: Math.max(leftoverC, leftoverR),
-          cells: new Int16Array(Math.max(leftoverC, leftoverR) ** 2).fill(-1),
+        if (leftoverR < plan.rows) {
+          cell = Math.max(cell, Math.min(42, Math.floor((8.6 * pxPerIn) / leftoverR)))
         }
-        const m = slice.size
+        const packed = new Int16Array(leftoverC * leftoverR)
         for (let r = 0; r < leftoverR; r++) {
           for (let c = 0; c < leftoverC; c++) {
-            slice.cells[r * m + c] = pattern.cells[(row0 + r) * pattern.size + (col0 + c)] ?? -1
+            packed[r * leftoverC + c] = pattern.cells[(row0 + r) * pattern.size + (col0 + c)] ?? -1
           }
         }
+        const slice: Pattern = { ...pattern, cells: packed }
         const chart = makeCanvas(40 + leftoverC * cell, 40 + leftoverR * cell)
-        renderChart(chart, slice, { cellPx: cell, fitWidth: leftoverC * cell })
+        renderChart(chart, slice, {
+          cellPx: cell,
+          fitWidth: leftoverC * cell,
+          cols: leftoverC,
+          rows: leftoverR,
+          stride: leftoverC,
+        })
         const img = await canvasJpeg(chart)
         await yieldFrame()
         pages.push({

@@ -24,7 +24,12 @@ export type PdfPage = {
 }
 
 function pdfEscape(text: string) {
-  return text.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)')
+  return text
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
+    .slice(0, 180)
 }
 
 export function buildPdf(pages: PdfPage[]): Uint8Array {

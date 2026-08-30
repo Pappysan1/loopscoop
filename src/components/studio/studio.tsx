@@ -5,7 +5,6 @@ import { buildPattern } from '../../lib/stitch/build-pattern'
 import { currentBuildGen, nextBuildGen, useStudio } from '../../lib/studio-store'
 import { ChartView } from './chart-view'
 import { Controls } from './controls'
-import { DiagPanel } from './diag-panel'
 import { ExportBar } from './export-bar'
 import { HoopPreview } from './hoop-preview'
 import { Legend } from './legend'
@@ -25,7 +24,6 @@ export function Studio() {
   const setPattern = useStudio((s) => s.setPattern)
   const setBuilding = useStudio((s) => s.setBuilding)
   const setPrintOpen = useStudio((s) => s.setPrintOpen)
-  const diagOpen = useStudio((s) => s.diagOpen)
   const setDiagOpen = useStudio((s) => s.setDiagOpen)
   const lastError = useStudio((s) => s.lastError)
 
@@ -122,7 +120,6 @@ export function Studio() {
         </button>
       </footer>
       <PrintSheet />
-      <DiagPanel open={diagOpen} onClose={() => setDiagOpen(false)} />
     </div>
   )
 }

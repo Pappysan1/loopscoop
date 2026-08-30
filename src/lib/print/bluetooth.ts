@@ -1,4 +1,6 @@
 import { diag } from '../diag/log'
+import { renderChart } from '../stitch/render-chart'
+import { renderHoop } from '../stitch/render-hoop'
 import type { Pattern } from '../stitch/types'
 
 const PRINTER_KEY = 'loopscoop.printer'
@@ -33,6 +35,13 @@ export function lastPrinterName() {
 async function findWriteChar(server: BluetoothRemoteGATTServer) {
   const services = await server.getPrimaryServices()
   const prefer = new Set([NORDIC_RX, '0000ff02-0000-1000-8000-00805f9b34fb'])
+  const knownServices = new Set([
+    NORDIC_UART,
+    PHOMEMO,
+    '000018f0-0000-1000-8000-00805f9b34fb',
+    '0000ffe0-0000-1000-8000-00805f9b34fb',
+    '0000ff00-0000-1000-8000-00805f9b34fb',
+  ])
   for (const svc of services) {
     const chars = await svc.getCharacteristics()
     for (const ch of chars) {
@@ -41,6 +50,7 @@ async function findWriteChar(server: BluetoothRemoteGATTServer) {
     }
   }
   for (const svc of services) {
+    if (!knownServices.has(svc.uuid)) continue
     const chars = await svc.getCharacteristics()
     for (const ch of chars) {
       if (ch.properties.writeWithoutResponse) return ch
@@ -67,7 +77,8 @@ export async function connectPrinter(forcePicker = false): Promise<BtPrinter> {
     if (!forcePicker) {
       try {
         const existing = await bluetooth.getDevices()
-        device = existing[0]
+        const remembered = lastPrinterName()
+        device = existing.find((d) => d.name && remembered && d.name === remembered) ?? undefined
       } catch {
         device = undefined
       }
@@ -140,6 +151,8 @@ async function writeChunks(char: BluetoothRemoteGATTCharacteristic, bytes: Uint8
 }
 
 function dither384(src: HTMLCanvasElement) {
+  try {
+  if (!src.width || !src.height) return null
   const w = 384
   const h = Math.max(1, Math.round((src.height / src.width) * w))
   const c = document.createElement('canvas')
@@ -149,8 +162,19 @@ function dither384(src: HTMLCanvasElement) {
   if (!ctx) return null
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, w, h)
-  ctx.drawImage(src, 0, 0, w, h)
-  const img = ctx.getImageData(0, 0, w, h)
+  try {
+    ctx.drawImage(src, 0, 0, w, h)
+  } catch (err) {
+    diag.error('canvas', 'Bluetooth dither drawImage failed', { error: err })
+    return null
+  }
+  let img: ImageData
+  try {
+    img = ctx.getImageData(0, 0, w, h)
+  } catch (err) {
+    diag.error('canvas', 'Bluetooth dither getImageData failed', { error: err })
+    return null
+  }
   const d = img.data
   const lum = new Float32Array(w * h)
   for (let i = 0; i < w * h; i++) {
@@ -179,42 +203,60 @@ function dither384(src: HTMLCanvasElement) {
     }
   }
   return { raster, width: w, height: h }
+  } catch (err) {
+    diag.error('canvas', 'Bluetooth dither failed', { error: err })
+    return null
+  }
+}
+
+function pushRaster(parts: number[], d: { raster: Uint8Array; width: number; height: number }) {
+  const bytesPerRow = d.width / 8
+  for (let y = 0; y < d.height; y += 24) {
+    const sliceH = Math.min(24, d.height - y)
+    parts.push(0x1d, 0x76, 0x30, 0x00, bytesPerRow & 0xff, (bytesPerRow >> 8) & 0xff, sliceH & 0xff, (sliceH >> 8) & 0xff)
+    for (let row = 0; row < sliceH; row++) {
+      const off = (y + row) * bytesPerRow
+      for (let i = 0; i < bytesPerRow; i++) parts.push(d.raster[off + i] ?? 0)
+    }
+  }
 }
 
 function escPosJob(pattern: Pattern, hoopCanvas: HTMLCanvasElement, includeChart: boolean) {
   const parts: number[] = [0x1b, 0x40, 0x1b, 0x61, 0x01]
   const text = (s: string) => {
-    for (const ch of s) parts.push(ch.charCodeAt(0) & 0x7f)
+    for (const ch of s) {
+      const c = ch.charCodeAt(0)
+      parts.push(c >= 32 && c < 127 ? c : 63)
+    }
     parts.push(10)
   }
   text('LOOP SCOOP')
   text((pattern.sourceName || 'pattern').slice(0, 32))
   text(`${pattern.hoopInches}" ${pattern.aidaCount}ct ${pattern.totalStitches} sts`)
   const d = dither384(hoopCanvas)
-  if (d) {
-    const bytesPerRow = d.width / 8
-    for (let y = 0; y < d.height; y += 24) {
-      const sliceH = Math.min(24, d.height - y)
-      parts.push(0x1d, 0x76, 0x30, 0x00, bytesPerRow & 0xff, (bytesPerRow >> 8) & 0xff, sliceH & 0xff, (sliceH >> 8) & 0xff)
-      for (let row = 0; row < sliceH; row++) {
-        const off = (y + row) * bytesPerRow
-        for (let i = 0; i < bytesPerRow; i++) parts.push(d.raster[off + i] ?? 0)
-      }
-    }
-  }
+  if (d) pushRaster(parts, d)
   text('')
   for (const c of pattern.colors.slice(0, 24)) {
     text(`${c.symbol} ${c.dmc ? `DMC ${c.dmc}` : c.hex} ${c.count}`)
   }
-  if (!includeChart) text('Use Print on paper for the full chart.')
+  if (includeChart) {
+    const chart = document.createElement('canvas')
+    renderChart(chart, pattern, { fitWidth: 384, cellPx: Math.max(4, Math.floor(384 / (pattern.size + 3))) })
+    const cd = dither384(chart)
+    if (cd) pushRaster(parts, cd)
+  } else {
+    text('Use Print on paper for the full chart.')
+  }
   parts.push(10, 10, 0x1d, 0x56, 0x41, 0x10)
   return new Uint8Array(parts)
 }
 
-export async function printPatternBluetooth(pattern: Pattern, hoopCanvas: HTMLCanvasElement) {
+export async function printPatternBluetooth(pattern: Pattern, hoopCanvas?: HTMLCanvasElement) {
   const printer = connected ?? (await connectPrinter())
+  const hoop = hoopCanvas && hoopCanvas.width ? hoopCanvas : document.createElement('canvas')
+  if (!hoopCanvas || !hoopCanvas.width) renderHoop(hoop, { pattern, cssSize: 384 })
   const includeChart = pattern.size <= 56
-  const job = escPosJob(pattern, hoopCanvas, includeChart)
+  const job = escPosJob(pattern, hoop, includeChart)
   await writeChunks(printer.char, job)
   diag.info('bluetooth', `Printed to ${printer.name}`)
   return printer

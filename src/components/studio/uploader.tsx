@@ -21,6 +21,9 @@ export async function loadImageFromFile(file: File) {
   if (file.type && !file.type.startsWith('image/')) {
     throw new Error('That file is not an image.')
   }
+  if (file.type === 'image/svg+xml') {
+    throw new Error('That file is not an image.')
+  }
   const url = URL.createObjectURL(file)
   try {
     const img = new Image()

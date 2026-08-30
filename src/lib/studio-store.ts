@@ -154,7 +154,7 @@ export const useStudio = create<StudioState>((set, get) => ({
         /* ignore */
       }
     }
-    setDiagContext({ action: 'set-photo', pattern: { sourceName } })
+    setDiagContext({ action: 'set-photo', pattern: { sourceName: sourceName.slice(0, 80) } })
     set({
       image,
       objectUrl,
@@ -185,7 +185,7 @@ export const useStudio = create<StudioState>((set, get) => ({
           size: pattern.size,
           totalStitches: pattern.totalStitches,
           colorCount: pattern.colors.length,
-          sourceName: pattern.sourceName,
+          sourceName: pattern.sourceName.slice(0, 80),
         },
       })
     }

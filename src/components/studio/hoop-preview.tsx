@@ -8,11 +8,13 @@ export function HoopPreview() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const dragging = useRef(false)
   const last = useRef({ x: 0, y: 0 })
+  const pan = useRef({ x: 0, y: 0 })
   const image = useStudio((s) => s.image)
   const pattern = useStudio((s) => s.pattern)
   const settings = useStudio((s) => s.settings)
   const highlight = useStudio((s) => s.highlight)
   const patch = useStudio((s) => s.patch)
+  pan.current = { x: settings.panX, y: settings.panY }
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -45,6 +47,8 @@ export function HoopPreview() {
         if (!image) return
         dragging.current = true
         last.current = { x: e.clientX, y: e.clientY }
+        const s = useStudio.getState().settings
+        pan.current = { x: s.panX, y: s.panY }
         try {
           e.currentTarget.setPointerCapture(e.pointerId)
         } catch (err) {
@@ -58,11 +62,10 @@ export function HoopPreview() {
         const dx = (e.clientX - last.current.x) / w
         const dy = (e.clientY - last.current.y) / w
         last.current = { x: e.clientX, y: e.clientY }
-        patch({
-          panX: settings.panX - dx,
-          panY: settings.panY - dy,
-        })
+        pan.current = { x: pan.current.x - dx, y: pan.current.y - dy }
+        patch({ panX: pan.current.x, panY: pan.current.y })
         if (canvas) {
+          const s = useStudio.getState().settings
           renderHoop(canvas, {
             pattern,
             image,
@@ -70,15 +73,18 @@ export function HoopPreview() {
             frame: hoopFrame(
               image.naturalWidth || image.width,
               image.naturalHeight || image.height,
-              settings.zoom,
-              settings.panX - dx,
-              settings.panY - dy,
-              settings.fitMode,
+              s.zoom,
+              pan.current.x,
+              pan.current.y,
+              s.fitMode,
             ),
           })
         }
       }}
       onPointerUp={() => {
+        dragging.current = false
+      }}
+      onPointerCancel={() => {
         dragging.current = false
       }}
     />

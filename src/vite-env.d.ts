@@ -8,6 +8,7 @@ interface BluetoothRemoteGATTCharacteristic {
 }
 
 interface BluetoothRemoteGATTService {
+  uuid: string
   getCharacteristics(): Promise<BluetoothRemoteGATTCharacteristic[]>
 }
 

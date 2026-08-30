@@ -63,6 +63,7 @@ export const DEFAULT_SETTINGS: StudioSettings = {
 
 export function stitchCount(hoopInches: number, aidaCount: number) {
   const n = Math.round(hoopInches * aidaCount)
+  if (!Number.isFinite(n)) return 24
   return Math.min(180, Math.max(24, n))
 }
 
