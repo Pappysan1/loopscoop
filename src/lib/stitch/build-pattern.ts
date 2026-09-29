@@ -36,8 +36,141 @@ function luminance(r: number, g: number, b: number) {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b
 }
 
-export function buildPattern(image: HTMLImageElement, settings: StudioSettings, sourceName: string): Pattern | null {
+export type PixelSource = { data: Uint8ClampedArray; width: number; height: number }
+
+type Rgb = { r: number; g: number; b: number }
+
+/** Very light, nearly grey: paper, sky, a studio sweep. */
+function isBackgroundLight(c: Rgb) {
+  const hi = Math.max(c.r, c.g, c.b)
+  const lo = Math.min(c.r, c.g, c.b)
+  return luminance(c.r, c.g, c.b) > 228 && hi - lo <= 28
+}
+
+/**
+ * "Skip light background": knock out light stitches that are connected to the
+ * hoop rim or to bare linen. The old check only looked at the square corners of
+ * the grid, most of which lie outside the round hoop, so it removed almost
+ * nothing. Light spots inside the subject (eye glints, a white collar) are not
+ * connected to the edge and are kept.
+ */
+function knockOutEdgeLight(raw: Array<Rgb | null>, n: number) {
+  const light = raw.map((c) => !!c && isBackgroundLight(c))
+  const gone = new Uint8Array(n * n)
+  const queue: number[] = []
+  const bare = (col: number, row: number) =>
+    col < 0 || row < 0 || col >= n || row >= n || raw[row * n + col] === null
+  for (let row = 0; row < n; row++) {
+    for (let col = 0; col < n; col++) {
+      const i = row * n + col
+      if (!light[i]) continue
+      if (bare(col - 1, row) || bare(col + 1, row) || bare(col, row - 1) || bare(col, row + 1)) {
+        gone[i] = 1
+        queue.push(i)
+      }
+    }
+  }
+  while (queue.length) {
+    const i = queue.pop() as number
+    const col = i % n
+    const row = (i - col) / n
+    const next = [
+      col > 0 ? i - 1 : -1,
+      col < n - 1 ? i + 1 : -1,
+      row > 0 ? i - n : -1,
+      row < n - 1 ? i + n : -1,
+    ]
+    for (const j of next) {
+      if (j >= 0 && light[j] && !gone[j]) {
+        gone[j] = 1
+        queue.push(j)
+      }
+    }
+  }
+  for (let i = 0; i < raw.length; i++) if (gone[i]) raw[i] = null
+}
+
+/** Read one colour per stitch inside the hoop circle; null means bare linen. */
+function sampleStitches(px: PixelSource, n: number, settings: StudioSettings): Array<Rgb | null> {
+  const { data, width: cw, height: ch } = px
+  const frame = hoopFrame(cw, ch, settings.zoom, settings.panX, settings.panY, settings.fitMode)
+  const raw: Array<Rgb | null> = new Array(n * n).fill(null)
+  const cx = (n - 1) / 2
+  const r2 = (n / 2) * (n / 2)
+  for (let row = 0; row < n; row++) {
+    for (let col = 0; col < n; col++) {
+      const dx = col - cx
+      const dy = row - cx
+      if (dx * dx + dy * dy > r2) continue
+      const p = sampleCell(frame, n, col, row)
+      const x = Math.floor(p.x)
+      const y = Math.floor(p.y)
+      if (x < 0 || y < 0 || x >= cw || y >= ch) continue
+      const o = (y * cw + x) * 4
+      if ((data[o + 3] ?? 0) < 8) continue
+      raw[row * n + col] = { r: data[o] ?? 0, g: data[o + 1] ?? 0, b: data[o + 2] ?? 0 }
+    }
+  }
+  return raw
+}
+
+/** Pure pattern build from pixels (no canvas), so it can be tested directly. */
+export function patternFromPixels(px: PixelSource, settings: StudioSettings, sourceName: string): Pattern {
   const n = stitchCount(settings.hoopInches, settings.aidaCount)
+  const raw = sampleStitches(px, n, settings)
+  if (settings.knockOutBackground) knockOutEdgeLight(raw, n)
+
+  const cells = new Int16Array(n * n)
+  cells.fill(-1)
+  const samples: Sample[] = []
+  const sampleAt: Array<Sample | null> = new Array(n * n).fill(null)
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw[i]
+    if (!c) continue
+    const sample = applyBcs(c.r, c.g, c.b, settings)
+    samples.push(sample)
+    sampleAt[i] = sample
+  }
+
+  const q = quantize(samples, settings.colorCount)
+  const counts = new Array(Math.max(0, q.palette.length)).fill(0)
+  for (let i = 0; i < sampleAt.length; i++) {
+    const sample = sampleAt[i]
+    if (!sample) continue
+    const id = q.assign(sample)
+    cells[i] = id
+    if (id >= 0 && id < counts.length) counts[id]++
+  }
+
+  const colors = q.palette.map((p, idx) => {
+    const hex = rgbToHex(p)
+    const dmc = settings.paletteMode === 'dmc' ? nearestDmc(hex) : null
+    const count = counts[idx] ?? 0
+    return {
+      hex: dmc ? dmc.hex : hex,
+      dmc: dmc?.code,
+      name: dmc ? dmc.name : hex.toUpperCase(),
+      symbol: symbolFor(idx),
+      count,
+      skeins: skeinsFor(count),
+    }
+  })
+
+  let totalStitches = 0
+  for (const c of counts) totalStitches += c
+
+  return {
+    size: n,
+    hoopInches: settings.hoopInches,
+    aidaCount: settings.aidaCount,
+    cells,
+    colors,
+    totalStitches,
+    sourceName,
+  }
+}
+
+export function buildPattern(image: HTMLImageElement, settings: StudioSettings, sourceName: string): Pattern | null {
   const imgW = image.naturalWidth || image.width
   const imgH = image.naturalHeight || image.height
   if (!imgW || !imgH) {
@@ -71,92 +204,5 @@ export function buildPattern(image: HTMLImageElement, settings: StudioSettings, 
     diag.error('canvas', 'Could not read photo pixels', { error: err })
     return null
   }
-
-  const frame = hoopFrame(cw, ch, settings.zoom, settings.panX, settings.panY, settings.fitMode)
-  const cells = new Int16Array(n * n)
-  cells.fill(-1)
-  const samples: Sample[] = []
-  const sampleAt: Array<{ i: number; sample: Sample } | null> = new Array(n * n)
-
-  const cx = (n - 1) / 2
-  const r2 = (n / 2) * (n / 2)
-
-  for (let row = 0; row < n; row++) {
-    for (let col = 0; col < n; col++) {
-      const i = row * n + col
-      const dx = col - cx
-      const dy = row - cx
-      if (dx * dx + dy * dy > r2) {
-        sampleAt[i] = null
-        continue
-      }
-      const p = sampleCell(frame, n, col, row)
-      const x = Math.floor(p.x)
-      const y = Math.floor(p.y)
-      if (x < 0 || y < 0 || x >= cw || y >= ch) {
-        sampleAt[i] = null
-        continue
-      }
-      const o = (y * cw + x) * 4
-      const r = data.data[o] ?? 0
-      const g = data.data[o + 1] ?? 0
-      const b = data.data[o + 2] ?? 0
-      const a = data.data[o + 3] ?? 0
-      if (a < 8) {
-        sampleAt[i] = null
-        continue
-      }
-      if (settings.knockOutBackground) {
-        const corner =
-          (col < n * 0.18 || col > n * 0.82) && (row < n * 0.18 || row > n * 0.82)
-        if (corner && luminance(r, g, b) > 232) {
-          sampleAt[i] = null
-          continue
-        }
-      }
-      const sample = applyBcs(r, g, b, settings)
-      samples.push(sample)
-      sampleAt[i] = { i, sample }
-    }
-  }
-
-  const q = quantize(samples, settings.colorCount)
-  const counts = new Array(Math.max(0, q.palette.length)).fill(0)
-  for (let i = 0; i < sampleAt.length; i++) {
-    const cell = sampleAt[i]
-    if (!cell) {
-      cells[i] = -1
-      continue
-    }
-    const id = q.assign(cell.sample)
-    cells[i] = id
-    if (id >= 0 && id < counts.length) counts[id]++
-  }
-
-  const colors = q.palette.map((p, idx) => {
-    const hex = rgbToHex(p)
-    const dmc = settings.paletteMode === 'dmc' ? nearestDmc(hex) : null
-    const count = counts[idx] ?? 0
-    return {
-      hex: dmc ? dmc.hex : hex,
-      dmc: dmc?.code,
-      name: dmc ? dmc.name : hex.toUpperCase(),
-      symbol: symbolFor(idx),
-      count,
-      skeins: skeinsFor(count),
-    }
-  })
-
-  let totalStitches = 0
-  for (const c of counts) totalStitches += c
-
-  return {
-    size: n,
-    hoopInches: settings.hoopInches,
-    aidaCount: settings.aidaCount,
-    cells,
-    colors,
-    totalStitches,
-    sourceName,
-  }
+  return patternFromPixels({ data: data.data, width: cw, height: ch }, settings, sourceName)
 }
