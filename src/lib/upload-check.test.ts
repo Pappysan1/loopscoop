@@ -50,15 +50,15 @@ describe('checkUploadFile (audit finding 6)', () => {
     await expect(checkUploadFile(big)).rejects.toThrow('under 25 MB')
   })
 
-  it('gives a plain message for HEIC photos', async () => {
-    await expect(checkUploadFile(blob(HEIC, 'image/heic'))).rejects.toThrow('HEIC')
+  it('lets HEIC through so Safari on iPhone can decode it', async () => {
+    await expect(checkUploadFile(blob(HEIC, 'image/heic'))).resolves.toBe('heic')
   })
 })
 
 describe('checkDecodedSize', () => {
-  it('refuses zero-pixel and over-40-megapixel images', () => {
+  it('refuses zero-pixel and over-50-megapixel images, but allows 48 MP iPhone shots', () => {
     expect(() => checkDecodedSize(0, 100)).toThrow('no pixels')
-    expect(() => checkDecodedSize(7000, 5000)).not.toThrow()
-    expect(() => checkDecodedSize(10000, 5000)).toThrow('megapixels')
+    expect(() => checkDecodedSize(8064, 6048)).not.toThrow()
+    expect(() => checkDecodedSize(10000, 5100)).toThrow('megapixels')
   })
 })

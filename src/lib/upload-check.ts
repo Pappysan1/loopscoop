@@ -3,7 +3,10 @@
 // look at the first bytes of the file itself.
 
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024
-export const MAX_MEGAPIXELS = 40
+// iPhones can shoot 48 MP (HEIF Max / ProRAW JPEG), so leave room for that.
+export const MAX_MEGAPIXELS = 50
+
+export const HEIC_MESSAGE = 'This browser can\u2019t read iPhone HEIC photos. Save it as a JPEG and try again.'
 
 export type SniffedType = 'jpeg' | 'png' | 'gif' | 'webp' | 'avif' | 'bmp' | 'heic' | null
 
@@ -63,9 +66,8 @@ export async function checkUploadFile(file: Blob | null | undefined): Promise<Sn
   } catch {
     throw new Error('That file is not an image.')
   }
-  if (kind === 'heic') {
-    throw new Error('iPhone-style HEIC photos can\u2019t be read here. Save it as a JPEG and try again.')
-  }
+  // HEIC is let through: Safari on iPhone and Mac decodes it. Browsers that can't
+  // will fail at decode, and the uploader turns that into HEIC_MESSAGE.
   if (!kind) throw new Error('That file is not an image.')
   return kind
 }

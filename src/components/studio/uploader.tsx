@@ -3,7 +3,7 @@ import { useRef } from 'react'
 import { toast } from 'sonner'
 import { diag } from '../../lib/diag/log'
 import { useStudio } from '../../lib/studio-store'
-import { checkDecodedSize, checkUploadFile } from '../../lib/upload-check'
+import { checkDecodedSize, checkUploadFile, HEIC_MESSAGE } from '../../lib/upload-check'
 
 const SAMPLES = [
   { src: '/samples/cat.jpg', label: 'Ginger cat' },
@@ -13,7 +13,7 @@ const SAMPLES = [
 ]
 
 export async function loadImageFromFile(file: File) {
-  await checkUploadFile(file)
+  const kind = await checkUploadFile(file)
   const url = URL.createObjectURL(file)
   try {
     const img = new Image()
@@ -33,7 +33,9 @@ export async function loadImageFromFile(file: File) {
     }
     // Browser decode failures come back as DOMExceptions with technical wording.
     const isDomError = typeof DOMException !== 'undefined' && err instanceof DOMException
-    throw err instanceof Error && !isDomError ? err : new Error('That file is not an image.')
+    const ours = err instanceof Error && !isDomError
+    if (!ours && kind === 'heic') throw new Error(HEIC_MESSAGE)
+    throw ours ? err : new Error('That file is not an image.')
   }
 }
 
