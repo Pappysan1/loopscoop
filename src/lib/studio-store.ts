@@ -16,6 +16,17 @@ import {
 const SETTINGS_KEY = 'loopscoop.settings'
 const LEGACY_KEY = 'hoopstitch.settings'
 
+/**
+ * Tone sliders use the outline's whole-number scale. Settings saved by the
+ * August build used fractions (-0.5..0.5), so a small non-integer is read as
+ * that old scale and converted once.
+ */
+function toneNumber(v: unknown, fallback: number, min: number, max: number) {
+  let n = asNumber(v, fallback)
+  if (!Number.isInteger(n) && Math.abs(n) <= 0.5) n *= 100
+  return Math.round(clamp(n, min, max))
+}
+
 function asNumber(v: unknown, fallback: number) {
   const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN
   return Number.isFinite(n) ? n : fallback
@@ -38,9 +49,9 @@ export function sanitizeSettings(raw: unknown): StudioSettings {
     zoom: clamp(asNumber(src.zoom, 1), 0.6, 3),
     panX: clamp(asNumber(src.panX, 0), -0.7, 0.7),
     panY: clamp(asNumber(src.panY, 0), -0.7, 0.7),
-    brightness: clamp(asNumber(src.brightness, 0), -0.5, 0.5),
-    contrast: clamp(asNumber(src.contrast, 0), -0.5, 0.5),
-    saturation: clamp(asNumber(src.saturation, 0), -0.5, 0.5),
+    brightness: toneNumber(src.brightness, DEFAULT_SETTINGS.brightness, -40, 40),
+    contrast: toneNumber(src.contrast, DEFAULT_SETTINGS.contrast, -40, 40),
+    saturation: toneNumber(src.saturation, DEFAULT_SETTINGS.saturation, -40, 60),
     fitMode: fit as FitMode,
     paletteMode: palette,
     knockOutBackground: src.knockOutBackground === true,

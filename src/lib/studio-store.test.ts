@@ -28,3 +28,25 @@ describe('stitchCount', () => {
     expect(stitchCount(1, 11)).toBe(24)
   })
 })
+
+describe('tone sliders (outline scale)', () => {
+  it('defaults to brightness 0, contrast 8, saturation 12', () => {
+    const s = sanitizeSettings({})
+    expect([s.brightness, s.contrast, s.saturation]).toEqual([0, 8, 12])
+  })
+
+  it('clamps to -40..40, -40..40, -40..60', () => {
+    const s = sanitizeSettings({ brightness: 99, contrast: -99, saturation: 99 })
+    expect([s.brightness, s.contrast, s.saturation]).toEqual([40, -40, 60])
+  })
+
+  it('converts settings saved on the old fractional scale', () => {
+    const s = sanitizeSettings({ brightness: 0.1, contrast: -0.24, saturation: 0.5 })
+    expect([s.brightness, s.contrast, s.saturation]).toEqual([10, -24, 50])
+  })
+
+  it('falls back on poison values', () => {
+    const s = sanitizeSettings({ brightness: 'x', contrast: null, saturation: NaN })
+    expect([s.brightness, s.contrast, s.saturation]).toEqual([0, 8, 12])
+  })
+})

@@ -11,9 +11,10 @@ import {
 } from './types'
 
 function applyBcs(r: number, g: number, b: number, s: StudioSettings): Sample {
-  const br = s.brightness
-  const ct = s.contrast
-  const sat = s.saturation
+  // Sliders are whole percentages (brightness/contrast -40..40, saturation -40..60).
+  const br = s.brightness / 100
+  const ct = s.contrast / 100
+  const sat = s.saturation / 100
   let rr = r / 255 + br
   let gg = g / 255 + br
   let bb = b / 255 + br

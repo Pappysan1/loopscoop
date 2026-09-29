@@ -101,9 +101,9 @@ export function Controls() {
         Brightness
         <input
           type="range"
-          min={-0.5}
-          max={0.5}
-          step={0.02}
+          min={-40}
+          max={40}
+          step={1}
           value={settings.brightness}
           className="mt-1 w-full accent-pine"
           onChange={(e) => patch({ brightness: Number(e.target.value) })}
@@ -113,9 +113,9 @@ export function Controls() {
         Contrast
         <input
           type="range"
-          min={-0.5}
-          max={0.5}
-          step={0.02}
+          min={-40}
+          max={40}
+          step={1}
           value={settings.contrast}
           className="mt-1 w-full accent-pine"
           onChange={(e) => patch({ contrast: Number(e.target.value) })}
@@ -125,9 +125,9 @@ export function Controls() {
         Saturation
         <input
           type="range"
-          min={-0.5}
-          max={0.5}
-          step={0.02}
+          min={-40}
+          max={60}
+          step={1}
           value={settings.saturation}
           className="mt-1 w-full accent-pine"
           onChange={(e) => patch({ saturation: Number(e.target.value) })}
