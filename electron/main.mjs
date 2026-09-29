@@ -1,7 +1,6 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+﻿import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import fs from 'node:fs'
 import http from 'node:http'
-import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -48,16 +47,6 @@ function safeJoin(root, urlPath) {
   return resolved
 }
 
-function lanAddresses(port) {
-  const out = []
-  for (const addrs of Object.values(os.networkInterfaces())) {
-    for (const a of addrs ?? []) {
-      if (a.family === 'IPv4' && !a.internal) out.push(`http://${a.address}:${port}`)
-    }
-  }
-  return out
-}
-
 function startStaticServer() {
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
@@ -88,10 +77,10 @@ function startStaticServer() {
       }
       send(target)
     })
-    server.listen(4173, '0.0.0.0', () => resolve({ server, port: 4173 }))
+    server.listen(4173, '127.0.0.1', () => resolve({ server, port: 4173 }))
     server.on('error', (err) => {
       if (err.code === 'EADDRINUSE') {
-        server.listen(0, '0.0.0.0', () => {
+        server.listen(0, '127.0.0.1', () => {
           const addr = server.address()
           resolve({ server, port: addr.port })
         })
@@ -107,23 +96,32 @@ async function createWindow() {
     height: 800,
     backgroundColor: '#f3eee6',
     webPreferences: {
-      preload: path.join(__dirname, 'preload.mjs'),
+      preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
+      webviewTag: false,
     },
   })
   win.webContents.on('render-process-gone', (_e, details) => {
     appendDiag({ time: new Date().toISOString(), level: 'fatal', source: 'electron', message: `renderer gone: ${details.reason}` })
   })
+  const appOrigin = `http://127.0.0.1:${port}`
+  // Stay on our own studio page: no navigating away, no embedded webviews.
+  win.webContents.on('will-navigate', (e, url) => {
+    if (!url.startsWith(appOrigin + '/')) e.preventDefault()
+  })
+  win.webContents.on('will-attach-webview', (e) => e.preventDefault())
+  // New windows never open inside the app; only plain https links go to the real browser.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url)
+    if (/^https:\/\//i.test(url)) void shell.openExternal(url)
     return { action: 'deny' }
   })
   appendDiag({
     time: new Date().toISOString(),
     level: 'info',
     source: 'electron',
-    message: `Serving studio on http://127.0.0.1:${port} ${lanAddresses(port).join(' ')}`,
+    message: `Serving studio on http://127.0.0.1:${port} (this computer only)`,
   })
   await win.loadURL(`http://127.0.0.1:${port}/`)
 }
