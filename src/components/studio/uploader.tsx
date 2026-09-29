@@ -3,6 +3,7 @@ import { useRef } from 'react'
 import { toast } from 'sonner'
 import { diag } from '../../lib/diag/log'
 import { useStudio } from '../../lib/studio-store'
+import { checkDecodedSize, checkUploadFile } from '../../lib/upload-check'
 
 const SAMPLES = [
   { src: '/samples/cat.jpg', label: 'Ginger cat' },
@@ -12,18 +13,7 @@ const SAMPLES = [
 ]
 
 export async function loadImageFromFile(file: File) {
-  if (!file || file.size === 0) {
-    throw new Error('That file is not an image.')
-  }
-  if (file.size > 25 * 1024 * 1024) {
-    throw new Error('That photo is too large — try one under 25 MB.')
-  }
-  if (file.type && !file.type.startsWith('image/')) {
-    throw new Error('That file is not an image.')
-  }
-  if (file.type === 'image/svg+xml') {
-    throw new Error('That file is not an image.')
-  }
+  await checkUploadFile(file)
   const url = URL.createObjectURL(file)
   try {
     const img = new Image()
@@ -33,9 +23,7 @@ export async function loadImageFromFile(file: File) {
         img.addEventListener('load', () => res())
         img.addEventListener('error', () => rej(new Error('That file is not an image.')))
       }))
-    if (!img.naturalWidth || !img.naturalHeight) {
-      throw new Error('That image has no pixels to stitch.')
-    }
+    checkDecodedSize(img.naturalWidth, img.naturalHeight)
     return { img, url }
   } catch (err) {
     try {
@@ -43,7 +31,9 @@ export async function loadImageFromFile(file: File) {
     } catch {
       /* ignore */
     }
-    throw err instanceof Error ? err : new Error('That file is not an image.')
+    // Browser decode failures come back as DOMExceptions with technical wording.
+    const isDomError = typeof DOMException !== 'undefined' && err instanceof DOMException
+    throw err instanceof Error && !isDomError ? err : new Error('That file is not an image.')
   }
 }
 
