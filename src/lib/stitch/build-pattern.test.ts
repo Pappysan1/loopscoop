@@ -77,3 +77,28 @@ describe('stitch sampling', () => {
     expect(p.totalStitches).toBeGreaterThan(0)
   })
 })
+
+describe('floss key', () => {
+  // A soft run of reds plus black: k-means splits the reds into several
+  // clusters, but many land on the same DMC thread and must share one row.
+  const photo = paint(240, 240, (x) => (x < 180 ? [190 + Math.floor(x / 12), 20 + Math.floor(x / 30), 30] : [10, 10, 10]))
+  const p = patternFromPixels(photo, { ...base, colorCount: 8 }, 'reds')
+
+  it('lists each DMC thread only once', () => {
+    const codes = p.colors.map((c) => c.dmc)
+    expect(new Set(codes).size).toBe(codes.length)
+  })
+
+  it('keeps cells, counts and totals consistent after merging', () => {
+    const tally = new Array(p.colors.length).fill(0)
+    for (const id of p.cells) if (id >= 0) tally[id]++
+    expect(tally).toEqual(p.colors.map((c) => c.count))
+    expect(p.totalStitches).toBe(tally.reduce((s, v) => s + v, 0))
+    expect(p.colors.every((c) => c.count > 0)).toBe(true)
+  })
+
+  it('gives the busiest thread the first symbol', () => {
+    expect(p.colors[0]?.symbol).toBe('●')
+    for (let i = 1; i < p.colors.length; i++) expect(p.colors[i - 1]!.count).toBeGreaterThanOrEqual(p.colors[i]!.count)
+  })
+})

@@ -167,22 +167,43 @@ export function patternFromPixels(px: PixelSource, settings: StudioSettings, sou
     if (id >= 0 && id < counts.length) counts[id]++
   }
 
-  const colors = q.palette.map((p, idx) => {
-    const hex = rgbToHex(p)
-    const dmc = settings.paletteMode === 'dmc' ? nearestDmc(hex) : null
+  // Several clusters can snap to the same DMC thread (or the same photo hex).
+  // Merge them into one key row, drop unused ones, and hand out symbols by use
+  // so the busiest threads get the clearest marks.
+  type Row = { hex: string; dmc: ReturnType<typeof nearestDmc> | null; count: number; from: number[] }
+  const merged = new Map<string, Row>()
+  q.palette.forEach((p, idx) => {
     const count = counts[idx] ?? 0
-    return {
-      hex: dmc ? dmc.hex : hex,
-      dmc: dmc?.code,
-      name: dmc ? dmc.name : hex.toUpperCase(),
-      symbol: symbolFor(idx),
-      count,
-      skeins: skeinsFor(count),
-    }
+    if (!count) return
+    const raw = rgbToHex(p)
+    const dmc = settings.paletteMode === 'dmc' ? nearestDmc(raw) : null
+    const key = dmc ? `dmc:${dmc.code}` : `hex:${raw.toLowerCase()}`
+    const row = merged.get(key)
+    if (row) {
+      row.count += count
+      row.from.push(idx)
+    } else merged.set(key, { hex: dmc ? dmc.hex : raw, dmc, count, from: [idx] })
   })
+  const ordered = [...merged.values()].sort((x, y) => y.count - x.count || x.hex.localeCompare(y.hex))
+  const remap = new Int16Array(Math.max(1, q.palette.length)).fill(-1)
+  ordered.forEach((row, next) => {
+    for (const old of row.from) remap[old] = next
+  })
+  for (let i = 0; i < cells.length; i++) {
+    const id = cells[i] ?? -1
+    if (id >= 0) cells[i] = remap[id] ?? -1
+  }
+  const colors = ordered.map((row, idx) => ({
+    hex: row.hex,
+    dmc: row.dmc?.code,
+    name: row.dmc ? row.dmc.name : row.hex.toUpperCase(),
+    symbol: symbolFor(idx),
+    count: row.count,
+    skeins: skeinsFor(row.count),
+  }))
 
   let totalStitches = 0
-  for (const c of counts) totalStitches += c
+  for (const c of colors) totalStitches += c.count
 
   return {
     size: n,
