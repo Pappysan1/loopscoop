@@ -56,7 +56,7 @@ function platform(): DiagEvent['platform'] {
 
 function ua() {
   try {
-    return navigator.userAgent.slice(0, 400)
+    return scrub(navigator.userAgent, 400)
   } catch {
     return 'unknown'
   }
@@ -66,12 +66,61 @@ function rid() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-function scrub(value: unknown): string {
+// Anything that could carry photo bytes or point at a photo on disk.
+// Case-insensitive: browsers accept DATA:IMAGE/... and Blob: just the same.
+const DATA_IMAGE_RE = /data:image\/[^,\s]*,[^\s"'<>)]*/gi
+const DATA_ANY_RE = /data:[a-z0-9.+-]+\/[^,\s]*,[^\s"'<>)]*/gi
+const BLOB_RE = /blob:[^\s"'<>)]+/gi
+const LOCAL_URI_RE = /\b(?:content|file):\/\/[^\s"'<>)]+/gi
+// Last-line guard for exports. If this matches, something slipped past scrub().
+const LEAK_RE = /data:[a-z0-9.+-]+\/[^,\s]*,|blob:|\b(?:content|file):\/\//i
+
+export function scrub(value: unknown, max = MSG_MAX): string {
   const s = String(value ?? '')
   return s
-    .replace(/data:image\/[a-zA-Z0-9+]+;base64,[a-zA-Z0-9+/=]+/g, '[image]')
-    .replace(/blob:[^\s)]+/g, '[blob]')
-    .slice(0, MSG_MAX)
+    .replace(DATA_IMAGE_RE, '[image]')
+    .replace(DATA_ANY_RE, '[data]')
+    .replace(BLOB_RE, '[blob]')
+    .replace(LOCAL_URI_RE, '[path]')
+    .slice(0, max)
+}
+
+// Photo file names can be personal ("maria-birthday.jpg"). Keep only a short,
+// plain slug so the log still says "a photo was loaded" without the details.
+export function safeName(value: unknown): string {
+  const s = scrub(value, 200)
+    .normalize('NFKD')
+    .replace(/[^a-zA-Z0-9._ -]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 40)
+  return s || 'photo'
+}
+
+function cleanSettings(raw: unknown): DiagEvent['settings'] {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const out: Record<string, string | number | boolean | null> = {}
+  let n = 0
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (n++ >= 30) break
+    const key = scrub(k, 40)
+    if (typeof v === 'number') out[key] = Number.isFinite(v) ? v : null
+    else if (typeof v === 'boolean' || v === null) out[key] = v
+    else if (typeof v === 'string') out[key] = scrub(v, 100)
+  }
+  return out
+}
+
+function cleanPattern(raw: unknown): DiagEvent['pattern'] {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const r = raw as Record<string, unknown>
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
+  return {
+    size: num(r.size),
+    totalStitches: num(r.totalStitches),
+    colorCount: num(r.colorCount),
+    sourceName: r.sourceName === undefined ? undefined : safeName(r.sourceName),
+  }
 }
 
 function emitChange() {
@@ -118,14 +167,14 @@ function loadPersisted() {
         id: typeof rec.id === 'string' ? rec.id : rid(),
         time: typeof rec.time === 'string' ? rec.time : new Date().toISOString(),
         level: rec.level === 'fatal' || rec.level === 'error' || rec.level === 'warn' || rec.level === 'info' ? rec.level : 'error',
-        source: (rec.source as DiagSource) || 'window',
+        source: typeof rec.source === 'string' ? (scrub(rec.source, 20) as DiagSource) : 'window',
         message: scrub(rec.message),
-        stack: typeof rec.stack === 'string' ? rec.stack.slice(0, STACK_MAX) : undefined,
-        action: typeof rec.action === 'string' ? rec.action : undefined,
-        settings: rec.settings && typeof rec.settings === 'object' ? rec.settings : undefined,
-        pattern: rec.pattern && typeof rec.pattern === 'object' ? rec.pattern : undefined,
+        stack: typeof rec.stack === 'string' ? scrub(rec.stack, STACK_MAX) : undefined,
+        action: typeof rec.action === 'string' ? scrub(rec.action, 80) : undefined,
+        settings: cleanSettings(rec.settings),
+        pattern: cleanPattern(rec.pattern),
         platform: rec.platform === 'electron' || rec.platform === 'android' ? rec.platform : 'web',
-        userAgent: typeof rec.userAgent === 'string' ? rec.userAgent : ua(),
+        userAgent: typeof rec.userAgent === 'string' ? scrub(rec.userAgent, 400) : ua(),
       })
     }
     if (ring.length > MEMORY_CAP) ring.length = MEMORY_CAP
@@ -153,6 +202,9 @@ export function resetDiagForTests() {
   loaded = false
   ring.length = 0
   persistOk = true
+  lastAction = undefined
+  extraSettings = undefined
+  extraPattern = undefined
 }
 
 export function setDiagContext(next: {
@@ -161,9 +213,9 @@ export function setDiagContext(next: {
   pattern?: DiagEvent['pattern']
 }) {
   try {
-    if (next.action) lastAction = next.action
-    if (next.settings) extraSettings = next.settings
-    if (next.pattern) extraPattern = next.pattern
+    if (next.action) lastAction = scrub(next.action, 80)
+    if (next.settings) extraSettings = cleanSettings(next.settings)
+    if (next.pattern) extraPattern = cleanPattern(next.pattern)
   } catch {
     /* ignore */
   }
@@ -185,7 +237,7 @@ export function logEvent(
       level,
       source,
       message: scrub(message),
-      stack: scrub(extra?.stack ?? stackFromErr).slice(0, STACK_MAX) || undefined,
+      stack: scrub(extra?.stack ?? stackFromErr, STACK_MAX) || undefined,
       action: lastAction,
       settings: extraSettings,
       pattern: extraPattern,
@@ -255,15 +307,20 @@ export function exportDiagJson() {
     pattern: e.pattern ?? null,
   }))
   const text = JSON.stringify(payload, null, 2)
-  if (/data:image|blob:/.test(text)) {
+  if (LEAK_RE.test(text)) {
     return JSON.stringify({ error: 'refused to export: image data leaked' })
   }
   return text
 }
 
+// Used by both "Export text" and "Copy", so both get the same leak guard.
 export function exportDiagText() {
   ensureLoaded()
-  return ring
+  const text = ring
     .map((e) => `[${e.time}] ${e.level.toUpperCase()} ${e.source} ${e.message}${e.stack ? `\n${e.stack}` : ''}`)
     .join('\n\n')
+  if (LEAK_RE.test(text)) {
+    return 'Refused to export: image data leaked into the log. Use Clear and try again.'
+  }
+  return text
 }
