@@ -1,3 +1,4 @@
+// Outline order: 20 marks, then A–V without I, O, Q (they read like o/0/symbols).
 export const STITCH_SYMBOLS = [
   '●',
   '×',
@@ -33,16 +34,11 @@ export const STITCH_SYMBOLS = [
   'M',
   'N',
   'P',
-  'Q',
   'R',
   'S',
   'T',
   'U',
   'V',
-  'W',
-  'X',
-  'Y',
-  'Z',
 ] as const
 
 export function symbolFor(index: number) {

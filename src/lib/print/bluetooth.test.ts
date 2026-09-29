@@ -42,7 +42,8 @@ describe('thermal floss key (audit finding 2 follow-up)', () => {
     const { asciiSymbol } = await import('./bluetooth')
     const out = STITCH_SYMBOLS.map(asciiSymbol)
     for (const s of out) expect(s).toMatch(/^[\x21-\x7e]$/)
-    expect(new Set(out).size).toBe(out.length)
+    // Case-insensitive: thermal fonts make x/X and w/W look alike.
+    expect(new Set(out.map((c) => c.toLowerCase())).size).toBe(out.length)
   })
 
   it('wraps long lines to 32 columns and keeps them ASCII', async () => {
