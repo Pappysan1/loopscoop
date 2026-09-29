@@ -48,3 +48,32 @@ describe('skip light background', () => {
     expect(on.totalStitches).toBeGreaterThan(0)
   })
 })
+
+describe('stitch sampling', () => {
+  it('averages the stitch square instead of copying one pixel', () => {
+    // Fine black/white checkerboard: a single-pixel read gives pure black or
+    // white stitches; averaging gives mid grey everywhere.
+    const checker = paint(220, 220, (x, y) => ((x + y) % 2 ? [255, 255, 255] : [0, 0, 0]))
+    const p = patternFromPixels(checker, { ...base, paletteMode: 'photo', colorCount: 6 }, 'checker')
+    const used = p.colors.filter((c) => c.count > 0)
+    for (const c of used) {
+      const v = parseInt(c.hex.slice(1, 3), 16)
+      expect(v).toBeGreaterThan(90)
+      expect(v).toBeLessThan(165)
+    }
+  })
+
+  it('treats mostly transparent stitches as bare linen', () => {
+    const clear = paint(100, 100, (x) => (x < 50 ? [200, 30, 30, 255] : [0, 0, 0, 0]))
+    const p = patternFromPixels(clear, base, 'half')
+    const mid = Math.floor(p.size / 2)
+    expect(at(p, 2, mid)).toBeGreaterThanOrEqual(0)
+    expect(at(p, p.size - 3, mid)).toBe(-1)
+  })
+
+  it('still samples when zoomed in past one pixel per stitch', () => {
+    const tiny = paint(10, 10, () => [10, 120, 60])
+    const p = patternFromPixels(tiny, { ...base, zoom: 3, fitMode: 'fill' }, 'tiny')
+    expect(p.totalStitches).toBeGreaterThan(0)
+  })
+})

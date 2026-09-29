@@ -97,18 +97,43 @@ function sampleStitches(px: PixelSource, n: number, settings: StudioSettings): A
   const raw: Array<Rgb | null> = new Array(n * n).fill(null)
   const cx = (n - 1) / 2
   const r2 = (n / 2) * (n / 2)
+  const cell = frame.side / Math.max(1, n)
   for (let row = 0; row < n; row++) {
     for (let col = 0; col < n; col++) {
       const dx = col - cx
       const dy = row - cx
       if (dx * dx + dy * dy > r2) continue
       const p = sampleCell(frame, n, col, row)
-      const x = Math.floor(p.x)
-      const y = Math.floor(p.y)
-      if (x < 0 || y < 0 || x >= cw || y >= ch) continue
-      const o = (y * cw + x) * 4
-      if ((data[o + 3] ?? 0) < 8) continue
-      raw[row * n + col] = { r: data[o] ?? 0, g: data[o + 1] ?? 0, b: data[o + 2] ?? 0 }
+      // The stitch centre decides photo versus bare linen, as in the outline.
+      if (p.x < 0 || p.y < 0 || p.x >= cw || p.y >= ch) continue
+      // Average the whole stitch square instead of one pixel, so JPEG speckle
+      // and single stray pixels do not become stitches. Up to 16×16 taps each.
+      const left = frame.originX + col * cell
+      const top = frame.originY + row * cell
+      const x0 = Math.max(0, Math.floor(left))
+      const y0 = Math.max(0, Math.floor(top))
+      const x1 = Math.min(cw, Math.max(x0 + 1, Math.ceil(left + cell)))
+      const y1 = Math.min(ch, Math.max(y0 + 1, Math.ceil(top + cell)))
+      const sx = Math.max(1, Math.floor((x1 - x0) / 16))
+      const sy = Math.max(1, Math.floor((y1 - y0) / 16))
+      let r = 0
+      let g = 0
+      let b = 0
+      let opaque = 0
+      let taps = 0
+      for (let y = y0; y < y1; y += sy) {
+        for (let x = x0; x < x1; x += sx) {
+          const o = (y * cw + x) * 4
+          taps++
+          if ((data[o + 3] ?? 0) < 8) continue
+          r += data[o] ?? 0
+          g += data[o + 1] ?? 0
+          b += data[o + 2] ?? 0
+          opaque++
+        }
+      }
+      if (!opaque || opaque * 2 < taps) continue
+      raw[row * n + col] = { r: r / opaque, g: g / opaque, b: b / opaque }
     }
   }
   return raw
