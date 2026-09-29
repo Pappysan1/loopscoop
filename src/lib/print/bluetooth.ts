@@ -266,6 +266,39 @@ function pushRaster(parts: number[], d: { raster: Uint8Array; width: number; hei
   }
 }
 
+/** ASCII stand-ins for chart symbols; pocket thermals only print plain ASCII. */
+const ASCII_SYMBOL: Record<string, string> = {
+  '●': 'o', '×': 'x', '■': '$', '▲': '^', '○': '0', '◆': '%', '△': '&', '□': '=',
+  '★': '!', '▼': 'y', '◇': '~', '▣': '8', '▶': '>', '◀': '<', '◎': '9', '▽': 'w',
+}
+
+export function asciiSymbol(symbol: string) {
+  if (ASCII_SYMBOL[symbol]) return ASCII_SYMBOL[symbol]
+  return /^[\x21-\x7e]$/.test(symbol) ? symbol : '?'
+}
+
+const KEY_COLS = 32
+
+/** Exported for tests: the floss key as ASCII lines no wider than a 58 mm roll. */
+export function thermalKeyLines(colors: Pattern['colors']) {
+  const lines: string[] = []
+  for (const c of colors.slice(0, 32)) {
+    const label = c.dmc ? `DMC ${c.dmc} ${c.name}` : c.hex.toUpperCase()
+    const words = `${asciiSymbol(c.symbol)} ${label} (${c.count})`.split(' ')
+    let line = ''
+    for (const word of words) {
+      const next = line ? `${line} ${word}` : word
+      if (next.length <= KEY_COLS) line = next
+      else {
+        if (line) lines.push(line)
+        line = `  ${word}`.slice(0, KEY_COLS)
+      }
+    }
+    if (line) lines.push(line)
+  }
+  return lines
+}
+
 function escPosJob(pattern: Pattern, hoopCanvas: HTMLCanvasElement, includeChart: boolean) {
   const parts: number[] = [0x1b, 0x40, 0x1b, 0x61, 0x01]
   const text = (s: string) => {
@@ -280,10 +313,6 @@ function escPosJob(pattern: Pattern, hoopCanvas: HTMLCanvasElement, includeChart
   text(`${pattern.hoopInches}" ${pattern.aidaCount}ct ${pattern.totalStitches} sts`)
   const d = dither384(hoopCanvas)
   if (d) pushRaster(parts, d)
-  text('')
-  for (const c of pattern.colors.slice(0, 24)) {
-    text(`${c.symbol} ${c.dmc ? `DMC ${c.dmc}` : c.hex} ${c.count}`)
-  }
   if (includeChart) {
     const chart = document.createElement('canvas')
     renderChart(chart, pattern, { fitWidth: 384, cellPx: Math.max(4, Math.floor(384 / (pattern.size + 3))) })
@@ -292,6 +321,9 @@ function escPosJob(pattern: Pattern, hoopCanvas: HTMLCanvasElement, includeChart
   } else {
     text('Use Print on paper for the full chart.')
   }
+  parts.push(0x1b, 0x61, 0x00)
+  text('')
+  for (const line of thermalKeyLines(pattern.colors)) text(line)
   parts.push(10, 10, 0x1d, 0x56, 0x41, 0x10)
   return new Uint8Array(parts)
 }
