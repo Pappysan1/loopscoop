@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { X } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   clearDiag,
   diagCount,
@@ -74,7 +75,14 @@ export function DiagPanel({ open, onClose }: { open: boolean; onClose: () => voi
           <button type="button" className="btn" onClick={() => download('loopscoop-diag.txt', exportDiagText(), 'text/plain')}>
             Export text
           </button>
-          <button type="button" className="btn" onClick={() => navigator.clipboard.writeText(exportDiagText())}>
+          <button type="button" className="btn" onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(exportDiagText())
+                toast.success('Log copied.')
+              } catch {
+                toast.message('This browser blocked copying. Use Export text instead.')
+              }
+            }}>
             Copy
           </button>
           <button type="button" className="btn" onClick={clearDiag}>
