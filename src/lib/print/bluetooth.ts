@@ -32,32 +32,65 @@ export function lastPrinterName() {
   }
 }
 
-async function findWriteChar(server: BluetoothRemoteGATTServer) {
-  const services = await server.getPrimaryServices()
-  const prefer = new Set([NORDIC_RX, '0000ff02-0000-1000-8000-00805f9b34fb'])
-  const knownServices = new Set([
-    NORDIC_UART,
-    PHOMEMO,
-    '000018f0-0000-1000-8000-00805f9b34fb',
-    '0000ffe0-0000-1000-8000-00805f9b34fb',
-    '0000ff00-0000-1000-8000-00805f9b34fb',
-  ])
+const uuid16 = (n: number) => `0000${n.toString(16).padStart(4, '0')}-0000-1000-8000-00805f9b34fb`
+const ISSC_SERVICE = '49535343-fe7d-4ae5-8fa9-9fafd205e455'
+const ISSC_WRITE = '49535343-8841-43f4-a8d4-ecbe34729bb3'
+
+/**
+ * Printer GATT services and the ONLY characteristics we will write ESC/POS to.
+ * Generic serial services (ffe0, Nordic UART) are shared by heart-rate straps,
+ * LED strips and other gadgets, so "first writable slot" is not good enough:
+ * we write only to the known printer write characteristic in each service.
+ */
+const PRINTER_WRITE_CHARS: Record<string, string[]> = {
+  [NORDIC_UART]: [NORDIC_RX],
+  [PHOMEMO]: [uuid16(0xff02)],
+  [uuid16(0x18f0)]: [uuid16(0x2af1)],
+  [uuid16(0xffe0)]: [uuid16(0xffe1)],
+  [uuid16(0xfff0)]: [uuid16(0xfff2)],
+  [uuid16(0xae30)]: [uuid16(0xae01)],
+  [ISSC_SERVICE]: [ISSC_WRITE],
+}
+
+export const PRINTER_SERVICES = Object.keys(PRINTER_WRITE_CHARS)
+
+type CharLike = { uuid: string; properties: { write?: boolean; writeWithoutResponse?: boolean } }
+type ServiceLike<C extends CharLike> = { uuid: string; getCharacteristics: () => Promise<C[]> }
+
+/** Exported for tests: pick the printer write characteristic, or null if this is not a known printer. */
+export async function pickPrinterChar<C extends CharLike>(services: ServiceLike<C>[]): Promise<C | null> {
   for (const svc of services) {
-    const chars = await svc.getCharacteristics()
-    for (const ch of chars) {
-      const props = ch.properties
-      if (prefer.has(ch.uuid) && (props.writeWithoutResponse || props.write)) return ch
+    const allowed = PRINTER_WRITE_CHARS[svc.uuid.toLowerCase()]
+    if (!allowed) continue
+    let chars: C[]
+    try {
+      chars = await svc.getCharacteristics()
+    } catch {
+      continue
     }
-  }
-  for (const svc of services) {
-    if (!knownServices.has(svc.uuid)) continue
-    const chars = await svc.getCharacteristics()
     for (const ch of chars) {
-      if (ch.properties.writeWithoutResponse) return ch
-      if (ch.properties.write) return ch
+      if (!allowed.includes(ch.uuid.toLowerCase())) continue
+      if (ch.properties.writeWithoutResponse || ch.properties.write) return ch
     }
   }
   return null
+}
+
+async function findWriteChar(server: BluetoothRemoteGATTServer) {
+  let services: BluetoothRemoteGATTService[] = []
+  try {
+    services = await server.getPrimaryServices()
+  } catch {
+    return null
+  }
+  return pickPrinterChar(services)
+}
+
+class NotAPrinterError extends Error {
+  constructor() {
+    super('That Bluetooth device isn’t a printer Loop Scoop can write to.')
+    this.name = 'NotAPrinterError'
+  }
 }
 
 export async function connectPrinter(forcePicker = false): Promise<BtPrinter> {
@@ -86,13 +119,21 @@ export async function connectPrinter(forcePicker = false): Promise<BtPrinter> {
     if (!device) {
       device = await bluetooth.requestDevice({
         acceptAllDevices: true,
-        optionalServices: [NORDIC_UART, PHOMEMO, 0x18f0, 0xff00, 0xffe0],
+        optionalServices: PRINTER_SERVICES,
       })
     }
     const server = await device.gatt?.connect()
     if (!server) throw new Error('Could not open a GATT connection.')
     const char = await findWriteChar(server)
-    if (!char) throw new Error('Printer has no writable Bluetooth characteristic.')
+    if (!char) {
+      // Also covers a remembered name that now belongs to some other gadget.
+      try {
+        device.gatt?.disconnect()
+      } catch {
+        /* ignore */
+      }
+      throw new NotAPrinterError()
+    }
     connected = { name: device.name || 'Bluetooth printer', device, char }
     try {
       localStorage.setItem(PRINTER_KEY, connected.name)
@@ -103,19 +144,23 @@ export async function connectPrinter(forcePicker = false): Promise<BtPrinter> {
     diag.info('bluetooth', `Connected to ${connected.name}`)
     return connected
   } catch (err) {
+    if (err instanceof NotAPrinterError) {
+      diag.warn('bluetooth', err.message)
+      throw err
+    }
     const name = err instanceof DOMException ? err.name : ''
     if (name === 'NotFoundError') {
       const msg = 'No Bluetooth printer was chosen.'
       diag.warn('bluetooth', msg, { error: err })
       throw new Error(msg)
     }
-    if (name === 'NotAllowedError') {
-      const msg = 'Bluetooth permission was denied.'
+    if (name === 'NotAllowedError' || name === 'SecurityError') {
+      const msg = 'Bluetooth needs a tap in Chrome — try Connect Bluetooth printer again.'
       diag.warn('bluetooth', msg, { error: err })
       throw new Error(msg)
     }
     diag.error('bluetooth', 'Bluetooth connect failed', { error: err })
-    throw new Error('Could not connect to the printer. Keep it awake and try again.')
+    throw new Error('Could not connect. Wake the printer, stay close, and make sure nothing else is using it.')
   }
 }
 
