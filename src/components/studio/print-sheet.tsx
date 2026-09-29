@@ -5,6 +5,7 @@ import {
   connectPrinter,
   currentPrinter,
   printPatternBluetooth,
+  PrinterPickerCancelled,
   webBluetoothAvailable,
 } from '../../lib/print/bluetooth'
 import { pagePlan } from '../../lib/print/layout'
@@ -187,6 +188,7 @@ export function PrintSheet() {
                     setBtName(printer.name)
                     toast.success(`Printed to ${printer.name}`)
                   } catch (err) {
+                    if (err instanceof PrinterPickerCancelled) return
                     toast.error(err instanceof Error ? err.message : 'Bluetooth print failed')
                   }
                 }}
@@ -202,6 +204,7 @@ export function PrintSheet() {
                       const p = await connectPrinter(true)
                       setBtName(p.name)
                     } catch (err) {
+                      if (err instanceof PrinterPickerCancelled) return
                       toast.error(err instanceof Error ? err.message : 'Could not choose a printer')
                     }
                   }}

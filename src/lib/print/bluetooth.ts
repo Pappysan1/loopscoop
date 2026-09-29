@@ -93,6 +93,14 @@ class NotAPrinterError extends Error {
   }
 }
 
+/** The person closed the printer picker without choosing. Callers stay quiet. */
+export class PrinterPickerCancelled extends Error {
+  constructor() {
+    super('No Bluetooth printer was chosen.')
+    this.name = 'PrinterPickerCancelled'
+  }
+}
+
 export async function connectPrinter(forcePicker = false): Promise<BtPrinter> {
   if (!btAvailable()) {
     const msg = 'Bluetooth printing needs Chrome on your phone, with the printer awake.'
@@ -150,9 +158,8 @@ export async function connectPrinter(forcePicker = false): Promise<BtPrinter> {
     }
     const name = err instanceof DOMException ? err.name : ''
     if (name === 'NotFoundError') {
-      const msg = 'No Bluetooth printer was chosen.'
-      diag.warn('bluetooth', msg, { error: err })
-      throw new Error(msg)
+      diag.info('bluetooth', 'Printer picker closed without a choice')
+      throw new PrinterPickerCancelled()
     }
     if (name === 'NotAllowedError' || name === 'SecurityError') {
       const msg = 'Bluetooth needs a tap in Chrome — try Connect Bluetooth printer again.'
