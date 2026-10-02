@@ -11,3 +11,5 @@ ios
 .vscode
 .env
 .env.*
+
+reviews/
