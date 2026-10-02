@@ -7,6 +7,8 @@ import { installDiag } from '../lib/diag/install'
 import { useStudio } from '../lib/studio-store'
 import appCss from '../styles.css?url'
 
+const base = import.meta.env.BASE_URL
+
 if (typeof window !== 'undefined') installDiag()
 
 export const Route = createRootRoute({
@@ -22,9 +24,9 @@ export const Route = createRootRoute({
     ],
     links: [
       { rel: 'stylesheet', href: appCss },
-      { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
-      { rel: 'apple-touch-icon', href: '/favicon.svg' },
-      { rel: 'manifest', href: '/manifest.webmanifest' },
+      { rel: 'icon', href: `${base}favicon.svg`, type: 'image/svg+xml' },
+      { rel: 'apple-touch-icon', href: `${base}favicon.svg` },
+      { rel: 'manifest', href: `${base}manifest.webmanifest` },
     ],
   }),
   component: RootComponent,

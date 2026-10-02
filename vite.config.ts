@@ -4,7 +4,9 @@ import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import viteReact from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  // `npm run build:pages` builds for https://pappysan1.github.io/loopscoop/
+  base: mode === 'pages' ? '/loopscoop/' : '/',
   server: {
     port: 3000,
     host: true,
@@ -29,4 +31,4 @@ export default defineConfig({
     }),
     viteReact(),
   ],
-})
+}))

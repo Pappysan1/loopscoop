@@ -5,11 +5,12 @@ import { diag } from '../../lib/diag/log'
 import { useStudio } from '../../lib/studio-store'
 import { checkDecodedSize, checkUploadFile, HEIC_MESSAGE } from '../../lib/upload-check'
 
+const base = import.meta.env.BASE_URL
 const SAMPLES = [
-  { src: '/samples/cat.jpg', label: 'Ginger cat' },
-  { src: '/samples/cat-portrait.jpg', label: 'Portrait (tall cat)' },
-  { src: '/samples/peony.jpg', label: 'Coral peony' },
-  { src: '/samples/monarch-wide.jpg', label: 'Wide shot (wide monarch)' },
+  { src: `${base}samples/cat.jpg`, label: 'Ginger cat' },
+  { src: `${base}samples/cat-portrait.jpg`, label: 'Portrait (tall cat)' },
+  { src: `${base}samples/peony.jpg`, label: 'Coral peony' },
+  { src: `${base}samples/monarch-wide.jpg`, label: 'Wide shot (wide monarch)' },
 ]
 
 export async function loadImageFromFile(file: File) {

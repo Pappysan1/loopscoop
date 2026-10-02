@@ -70,14 +70,14 @@ export function Studio() {
       <header className="border-b border-line bg-paper">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-3">
-            <img src="/favicon.svg" alt="" className="h-10 w-10 rounded-lg" />
+            <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" className="h-10 w-10 rounded-lg" />
             <div>
               <h1 className="font-display text-xl leading-none">Loop Scoop</h1>
               <p className="text-sm text-muted">Any photo, scaled to your hoop</p>
             </div>
           </div>
           <p className="hidden text-sm text-muted sm:block" title="Open this address on an iPhone on the same Wi-Fi">
-            Open on iPhone: {typeof window !== 'undefined' ? window.location.origin : ''}
+            Open on iPhone: {typeof window !== 'undefined' ? window.location.origin + import.meta.env.BASE_URL : ''}
           </p>
           <div className="flex rounded-lg border border-line p-1">
             <button type="button" className={`btn ${view === 'hoop' ? 'btn-primary' : ''}`} onClick={() => setView('hoop')}>
