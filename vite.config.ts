@@ -23,6 +23,8 @@ export default defineConfig({
     tanstackStart({
       spa: {
         enabled: true,
+        // Write the app shell as index.html so any static host (GitHub Pages) serves it.
+        prerender: { outputPath: '/index' },
       },
     }),
     viteReact(),
